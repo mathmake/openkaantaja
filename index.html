@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenKääntäjä</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', Arial, sans-serif;
+      margin: 30px;
+      background-color: #f4f6f9;
+      color: #111;
+      font-weight: normal;
+    }
+
+    /* Yläosan asettelu (Kielet vasemmalla, Nappi oikealla) */
+    .header-container {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      background: white;
+      padding: 20px 30px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+      margin-bottom: 25px;
+    }
+
+    /* 10 kielen valintaruudukko (2 riviä x 5 saraketta) */
+    .checkbox-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(110px, 1fr));
+      gap: 12px 20px;
+    }
+
+    .checkbox-grid label {
+      font-size: 0.95rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: normal;
+    }
+
+    .checkbox-grid input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+    }
+
+    /* Käynnistyspainike oikeassa yläkulmassa */
+    .btn {
+      padding: 12px 24px;
+      font-size: 1rem;
+      font-weight: normal;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      color: white;
+      background-color: #1a73e3;
+      transition: background 0.2s;
+      white-space: nowrap;
+    }
+
+    .btn-stop { background-color: #d93025; }
+
+    /* Alaosien kortit */
+    .card {
+      background: white;
+      padding: 25px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+      margin-bottom: 25px;
+    }
+
+    /* Suomi ja puhuttu teksti */
+    .original-text {
+      font-size: 1.25rem;
+      color: #5f6368;
+      min-height: 35px;
+      font-weight: normal;
+    }
+
+    .lang-label-grey {
+      color: #5f6368;
+    }
+
+    /* Käännökset */
+    .translation-item {
+      margin-bottom: 20px;
+      padding-bottom: 15px;
+      border-bottom: 1px solid #eee;
+    }
+
+    .translation-item:last-child {
+      border-bottom: none;
+      margin-bottom: 0;
+      padding-bottom: 0;
+    }
+
+    .translated-text {
+      font-size: 1.8rem;
+      font-weight: normal;
+      line-height: 1.3;
+      color: #000;
+    }
+
+    .lang-name {
+      color: #1a73e3;
+      font-weight: normal;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- YLÄOSA -->
+  <div class="header-container">
+    <div class="languages-box">
+      <div class="checkbox-grid">
+        <label><input type="checkbox" class="targetLang" value="ar" checked> arabia</label>
+        <label><input type="checkbox" class="targetLang" value="en" checked> englanti</label>
+        <label><input type="checkbox" class="targetLang" value="zh" checked> kiina</label>
+        <label><input type="checkbox" class="targetLang" value="ku" checked> kurdi</label>
+        <label><input type="checkbox" class="targetLang" value="fa" checked> persia</label>
+        <label><input type="checkbox" class="targetLang" value="so" checked> somali</label>
+        <label><input type="checkbox" class="targetLang" value="uk" checked> ukraina</label>
+        <label><input type="checkbox" class="targetLang" value="ru" checked> venäjä</label>
+        <label><input type="checkbox" class="targetLang" value="vi" checked> vietnam</label>
+        <label><input type="checkbox" class="targetLang" value="et" checked> viro</label>
+      </div>
+    </div>
+
+    <div>
+      <button id="startBtn" class="btn" onclick="toggleRecognition()">Käynnistä kuuntelu</button>
+    </div>
+  </div>
+
+  <!-- KESKIOSA: Suomi ja puhuttu teksti -->
+  <div class="card">
+    <div id="originalText" class="original-text">Paina "Käynnistä kuuntelu" ja ala puhua...</div>
+  </div>
+
+  <!-- ALAOSA: Käännökset -->
+  <div class="card">
+    <div id="translationsContainer">
+      <div class="translated-text" style="color: #888; font-size: 1.3rem;">Käännökset ilmestyvät tähän...</div>
+    </div>
+  </div>
+
+  <script>
+    // Julkaistu Google Apps Script Web App URL
+    const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx5fY_0fyiCySSPA2pJ_yS3lWa7xzF0frkM0cTtzvymvJBlRXcXC-pH5qLZAmu5f-y2/exec";
+
+    const langNames = {
+      'ar': 'arabia',
+      'en': 'englanti',
+      'zh': 'kiina',
+      'ku': 'kurdi',
+      'fa': 'persia',
+      'so': 'somali',
+      'uk': 'ukraina',
+      'ru': 'venäjä',
+      'vi': 'vietnam',
+      'et': 'viro'
+    };
+
+    let recognition;
+    let isListening = false;
+
+    if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'fi-FI';
+
+      recognition.onresult = function(event) {
+        let interimTranscript = '';
+        let finalTranscript = '';
+
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          if (event.results[i].isFinal) {
+            finalTranscript += event.results[i][0].transcript;
+          } else {
+            interimTranscript += event.results[i][0].transcript;
+          }
+        }
+
+        const currentSpeech = finalTranscript || interimTranscript;
+        if (currentSpeech.trim() !== '') {
+          document.getElementById('originalText').innerHTML = '<span class="lang-label-grey">suomi:</span> ' + currentSpeech;
+        }
+
+        if (finalTranscript.trim() !== '') {
+          sendToTranslate(finalTranscript);
+        }
+      };
+
+      recognition.onerror = function(event) {
+        document.getElementById('originalText').innerHTML = '<span class="lang-label-grey">suomi:</span> Virhe puheentunnistuksessa: ' + event.error;
+      };
+
+      recognition.onend = function() {
+        if (isListening) {
+          recognition.start();
+        }
+      };
+    } else {
+      alert("Selaimesi ei tue puheentunnistusta. Käytä Google Chromea.");
+    }
+
+    function toggleRecognition() {
+      const btn = document.getElementById('startBtn');
+      if (!isListening) {
+        recognition.start();
+        isListening = true;
+        btn.innerText = "Lopeta kuuntelu";
+        btn.classList.add('btn-stop');
+      } else {
+        isListening = false;
+        recognition.stop();
+        btn.innerText = "Käynnistä kuuntelu";
+        btn.classList.remove('btn-stop');
+      }
+    }
+
+    function sendToTranslate(text) {
+      const checkboxes = document.querySelectorAll('.targetLang:checked');
+      const targetLangs = Array.from(checkboxes).map(cb => cb.value);
+
+      if (targetLangs.length === 0) return;
+
+      fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        body: JSON.stringify({
+          text: text,
+          targetLangs: targetLangs
+        })
+      })
+      .then(res => res.json())
+      .then(data => {
+        const container = document.getElementById('translationsContainer');
+        container.innerHTML = '';
+
+        for (const [langCode, translatedText] of Object.entries(data)) {
+          const name = langNames[langCode] || langCode.toLowerCase();
+          const div = document.createElement('div');
+          div.className = 'translation-item';
+          div.innerHTML = `
+            <div class="translated-text">
+              <span class="lang-name">${name}:</span> ${translatedText}
+            </div>
+          `;
+          container.appendChild(div);
+        }
+      })
+      .catch(err => {
+        console.error("Virhe käännöksessä:", err);
+      });
+    }
+  </script>
+</body>
+</html>
