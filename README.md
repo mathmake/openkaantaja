@@ -1,2 +1,2 @@
 # openkaantaja
-Kääntää puheen yleisimmille suomessa käytetyille vieraille kielille
+Kääntää puheen yleisimmille Suomessa käytetyille vieraille kielille
